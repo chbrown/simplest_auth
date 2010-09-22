@@ -43,7 +43,9 @@ module SimplestAuth
 
     def current_user
       @current_user ||= begin
-        if user_class.respond_to?(:get)
+        if user_class.respond_to?(:[])
+          user_class[current_user_id]
+        elsif user_class.respond_to?(:get)
           user_class.get(current_user_id)
         else
           user_class.find(current_user_id)

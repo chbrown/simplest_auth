@@ -12,6 +12,12 @@ module SimplestAuth
         base.class_eval do
           before(:save) {hash_password if password_required?}
         end
+      elsif base.sequel?
+        base.class_eval do
+          def before_save
+            hash_password if password_required?
+          end
+        end
       elsif base.active_record? || base.mongo_mapper?
         base.class_eval do
           before_save :hash_password, :if => :password_required?
@@ -32,9 +38,15 @@ module SimplestAuth
         defined?(MongoMapper) && ancestors.include?(MongoMapper::Document)
       end
 
+      def sequel?
+        defined?(Sequel) && ancestors.include?(Sequel::Model)
+      end
+
       def authenticate(email, password)
         if active_record?
           klass = find_by_email(email)
+        elsif sequel?
+          klass = filter(:email => email).first
         elsif data_mapper? || mongo_mapper?
           klass = first(:email => email)
         end
@@ -50,10 +62,17 @@ module SimplestAuth
               (klass && klass.authentic?(password)) ? klass : nil
             end
           EOM
-        elsif data_mapper? || mongo_mapper?
+        elsif sequel?
           instance_eval <<-EOM
             def authenticate(#{ident}, password)
               klass = first(:#{ident} => #{ident})
+              (klass && klass.authentic?(password)) ? klass : nil
+            end
+          EOM
+        elsif data_mapper? || mongo_mapper?
+          instance_eval <<-EOM
+            def authenticate(#{ident}, password)
+              klass = filter(:#{ident} => #{ident}).first
               (klass && klass.authentic?(password)) ? klass : nil
             end
           EOM
